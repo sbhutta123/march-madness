@@ -5,8 +5,8 @@ const nextConfig = {
   images: { unoptimized: true },
 
   // If your repo is github.com/USERNAME/march-madness, set basePath:
-  // basePath: "/march-madness",
-  // assetPrefix: "/march-madness/",
+  basePath: "/march-madness",
+  assetPrefix: "/march-madness/",
   // Uncomment the two lines above and replace "march-madness" with your repo name.
 };
 
