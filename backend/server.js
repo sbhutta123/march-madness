@@ -158,61 +158,40 @@ function getPossibleOpponents(teamName, targetRound, allGames, allTeamMap) {
   const targetIdx = ROUND_ORDER.indexOf(targetRound);
   if (targetIdx < 0) return [];
 
-  // Check if opponent is already known for this round
-  const scheduledGame = allGames.find(g =>
-    g.round === targetRound &&
-    (g.home.name === teamName || g.away.name === teamName)
-  );
-  if (scheduledGame) {
-    const opp = scheduledGame.home.name === teamName ? scheduledGame.away : scheduledGame.home;
-    if (opp.name && opp.name !== "TBD") {
-      return [{ name: opp.name, seed: opp.seed, record: opp.record, confirmed: true }];
-    }
-  }
-
-  // Get team's region
+  // Get team's region from their first round game
   const teamGames = allGames.filter(g => g.home.name === teamName || g.away.name === teamName);
   const teamRegion = teamGames.find(g => g.region)?.region || null;
 
-  // Find teams still alive at target round - 1
-  const prevRound = ROUND_ORDER[targetIdx - 1];
-  const prevRoundGames = allGames.filter(g => g.round === prevRound);
-
-  const aliveTeams = new Set();
-  prevRoundGames.forEach(g => {
-    if (g.status === "final") {
-      if (g.home.winner) aliveTeams.add(g.home.name);
-      if (g.away.winner) aliveTeams.add(g.away.name);
-    } else {
-      // Game not played yet — both teams still possible
-      if (g.home.name !== "TBD") aliveTeams.add(g.home.name);
-      if (g.away.name !== "TBD") aliveTeams.add(g.away.name);
+  // Build set of eliminated teams (lost a final game)
+  const eliminated = new Set();
+  allGames.forEach(g => {
+    const s = g.status?.toLowerCase() || "";
+    if (s.includes("final") || s.includes("post")) {
+      if (!g.home.winner && g.away.winner) eliminated.add(g.home.name);
+      if (!g.away.winner && g.home.winner) eliminated.add(g.away.name);
     }
   });
 
-  aliveTeams.delete(teamName);
+  // Get all teams from same region's first round games
+  const regionTeams = new Map();
+  const firstRoundGames = allGames.filter(g => g.round === "First Round");
 
-  let candidates = Array.from(aliveTeams);
-
-  // Filter to same region for rounds before Final Four
-  if (teamRegion && targetIdx < 4) {
-    const sameRegion = candidates.filter(name => {
-      const g = allGames.find(game =>
-        (game.home.name === name || game.away.name === name) && game.region === teamRegion
-      );
-      return !!g;
+  firstRoundGames
+    .filter(g => targetIdx < 4 ? (!teamRegion || g.region === teamRegion) : true)
+    .forEach(g => {
+      [g.home, g.away].forEach(t => {
+        if (t.name && t.name !== "TBD" && t.name !== teamName) {
+          regionTeams.set(t.name, { name: t.name, seed: t.seed, record: t.record });
+        }
+      });
     });
-    if (sameRegion.length > 0) candidates = sameRegion;
-  }
 
-  return candidates
-    .filter(name => name !== teamName)
-    .map(name => {
-      const info = allTeamMap.get(name);
-      return { name, seed: info?.seed || null, record: info?.record || "", confirmed: false };
-    })
+  // Return non-eliminated candidates sorted by seed
+  return Array.from(regionTeams.values())
+    .filter(t => !eliminated.has(t.name))
     .sort((a, b) => (a.seed || 99) - (b.seed || 99))
-    .slice(0, 8);
+    .slice(0, 8)
+    .map(t => ({ ...t, confirmed: false }));
 }
 
 // ── /api/bracket ─────────────────────────────────────────────
