@@ -32,17 +32,15 @@ app.use("/api/", limiter);
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// ── NCAA Data API (more reliable for tournament games) ────────
+// ── ESPN API with date-range queries ─────────────────────────
 const ROUND_DATES = {
-  "First Round":   ["2026/03/19", "2026/03/20"],
-  "Second Round":  ["2026/03/21", "2026/03/22"],
-  "Sweet 16":      ["2026/03/27", "2026/03/28"],
-  "Elite 8":       ["2026/03/29", "2026/03/30"],
-  "Final Four":    ["2026/04/04"],
-  "Championship":  ["2026/04/06"],
+  "First Round":   ["20260319", "20260320"],
+  "Second Round":  ["20260321", "20260322"],
+  "Sweet 16":      ["20260327", "20260328"],
+  "Elite 8":       ["20260329", "20260330"],
+  "Final Four":    ["20260404"],
+  "Championship":  ["20260406"],
 };
-
-const ALL_ROUND_DATES = Object.values(ROUND_DATES).flat();
 
 const ESPN_RANKINGS = {
   mens: "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/rankings",
@@ -64,48 +62,55 @@ function getRoundFromDate(dateStr) {
   return null;
 }
 
-// Fetch all tournament games across all round dates from NCAA scoreboard API
+function parseESPNCompetitor(c) {
+  return {
+    name: c?.team?.displayName || "TBD",
+    seed: c?.seed ? parseInt(c.seed) : null,
+    score: c?.score || null,
+    record: c?.records?.[0]?.summary || "",
+    winner: c?.winner || false,
+  };
+}
+
+// Fetch all tournament games by querying ESPN per round date
 async function fetchAllTournamentGames(tournament) {
-  const sport = tournament === "womens" ? "basketball-women" : "basketball-men";
+  const league = tournament === "womens"
+    ? "womens-college-basketball"
+    : "mens-college-basketball";
   const allGames = [];
 
-  await Promise.all(ALL_ROUND_DATES.map(async (dateStr) => {
-    const url = `https://data.ncaa.com/casablanca/scoreboard/${sport}/d1/${dateStr}/scoreboard.json`;
+  const allDates = Object.values(ROUND_DATES).flat();
+
+  await Promise.all(allDates.map(async (dateStr) => {
+    const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/${league}/scoreboard?dates=${dateStr}&limit=50`;
     const data = await safeFetch(url);
-    if (!data?.games?.length) return;
+    if (!data?.events?.length) return;
 
     const round = getRoundFromDate(dateStr);
 
-    data.games.forEach(game => {
-      const home = game.home;
-      const away = game.away;
+    // Filter to tournament games only — must have seeded competitors
+    const tourneyEvents = data.events.filter(e =>
+      e.competitions?.[0]?.competitors?.some(c => c.seed)
+    );
 
-      // Only include seeded teams (= tournament games)
-      if (!home?.seed && !away?.seed) return;
+    tourneyEvents.forEach(event => {
+      const comp = event.competitions?.[0];
+      const competitors = comp?.competitors || [];
+      const home = competitors.find(c => c.homeAway === "home");
+      const away = competitors.find(c => c.homeAway === "away");
+      const notes = comp?.notes || [];
+      const region = notes.find(n => n.type === "rotation")?.headline ||
+                     notes.find(n => n.headline?.match(/East|West|South|Midwest/))?.headline?.match(/(East|West|South|Midwest)/)?.[1] ||
+                     null;
 
       allGames.push({
-        id: game.game?.gameID || `${dateStr}-${home?.names?.short}-${away?.names?.short}`,
+        id: event.id,
         round: round || "Tournament",
         date: dateStr,
-        status: game.game?.gameState || "",
-        statusDetail: game.game?.contestClock || "",
-        region: game.game?.bracketRegion || null,
-        home: {
-          name: home?.names?.full || home?.names?.short || "TBD",
-          shortName: home?.names?.short || "",
-          seed: home?.seed ? parseInt(home.seed) : null,
-          score: home?.score || null,
-          record: home?.record || "",
-          winner: game.game?.gameState === "final" && parseInt(home?.score || 0) > parseInt(away?.score || 0),
-        },
-        away: {
-          name: away?.names?.full || away?.names?.short || "TBD",
-          shortName: away?.names?.short || "",
-          seed: away?.seed ? parseInt(away.seed) : null,
-          score: away?.score || null,
-          record: away?.record || "",
-          winner: game.game?.gameState === "final" && parseInt(away?.score || 0) > parseInt(home?.score || 0),
-        },
+        status: comp?.status?.type?.description || "",
+        region,
+        home: parseESPNCompetitor(home),
+        away: parseESPNCompetitor(away),
       });
     });
   }));
@@ -193,22 +198,10 @@ app.get("/api/bracket", async (req, res) => {
   const { tournament } = req.query;
   if (!tournament) return res.status(400).json({ error: "tournament required" });
 
-  // Debug: test one URL directly
-  const sport = tournament === "womens" ? "basketball-women" : "basketball-men";
-  const testUrl = `https://data.ncaa.com/casablanca/scoreboard/${sport}/d1/2026/03/19/scoreboard.json`;
-  console.log("Testing URL:", testUrl);
-  const testData = await safeFetch(testUrl);
-  console.log("Test response keys:", testData ? Object.keys(testData) : "null");
-  console.log("Games count:", testData?.games?.length || 0);
-  if (testData?.games?.length > 0) {
-    console.log("First game sample:", JSON.stringify(testData.games[0]).slice(0, 300));
-  }
-
   const games = await fetchAllTournamentGames(tournament);
-  console.log("Total games fetched:", games.length);
 
   if (!games.length) {
-    return res.json({ ok: true, teams: [], games: [], debug: { testUrl, testDataKeys: testData ? Object.keys(testData) : null, gamesInTest: testData?.games?.length || 0 } });
+    return res.json({ ok: true, teams: [], games: [] });
   }
 
   // Build team map
