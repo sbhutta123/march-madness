@@ -134,6 +134,20 @@ function parseESPNCompetitor(c) {
   };
 }
 
+function isTournamentGame(event) {
+  const notes = event.competitions?.[0]?.notes || [];
+  return notes.some(n =>
+    n.headline?.toLowerCase().includes("championship") ||
+    n.headline?.toLowerCase().includes("ncaa")
+  );
+}
+
+function extractRegionFromNotes(notes) {
+  const headline = notes?.find(n => n.headline)?.headline || "";
+  const match = headline.match(/(East|West|South|Midwest)/i);
+  return match ? match[1] : null;
+}
+
 // Fetch all tournament games by querying ESPN per round date
 async function fetchAllTournamentGames(tournament) {
   const league = tournament === "womens"
@@ -144,16 +158,15 @@ async function fetchAllTournamentGames(tournament) {
   const allDates = Object.values(ROUND_DATES).flat();
 
   await Promise.all(allDates.map(async (dateStr) => {
-    const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/${league}/scoreboard?dates=${dateStr}&limit=50`;
+    const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/${league}/scoreboard?dates=${dateStr}&groups=100&limit=100`;
     const data = await safeFetch(url);
     if (!data?.events?.length) return;
 
     const round = getRoundFromDate(dateStr);
 
-    // Filter to tournament games only — must have seeded competitors
-    const tourneyEvents = data.events.filter(e =>
-      e.competitions?.[0]?.competitors?.some(c => c.seed)
-    );
+    // Filter to NCAA tournament games using notes headline
+    const tourneyEvents = data.events.filter(isTournamentGame);
+    console.log(`${dateStr}: ${data.events.length} total events, ${tourneyEvents.length} tournament games`);
 
     tourneyEvents.forEach(event => {
       const comp = event.competitions?.[0];
@@ -161,9 +174,7 @@ async function fetchAllTournamentGames(tournament) {
       const home = competitors.find(c => c.homeAway === "home");
       const away = competitors.find(c => c.homeAway === "away");
       const notes = comp?.notes || [];
-      const region = notes.find(n => n.type === "rotation")?.headline ||
-                     notes.find(n => n.headline?.match(/East|West|South|Midwest/))?.headline?.match(/(East|West|South|Midwest)/)?.[1] ||
-                     null;
+      const region = extractRegionFromNotes(notes);
 
       allGames.push({
         id: event.id,
@@ -178,10 +189,11 @@ async function fetchAllTournamentGames(tournament) {
   }));
 
   if (allGames.length === 0) {
-    console.log("ESPN returned no games — using hardcoded 2026 bracket fallback");
+    console.log("ESPN returned no tournament games — using hardcoded fallback");
     return tournament === "womens" ? WOMENS_BRACKET_2026 : MENS_BRACKET_2026;
   }
 
+  console.log(`Total tournament games fetched: ${allGames.length}`);
   return allGames;
 }
 
@@ -429,27 +441,12 @@ IMPORTANT: Before predicting, use web search to find current injury reports, rec
 });
 
 app.get("/api/test", async (_req, res) => {
-  const url = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=20260319&groups=100&limit=50";
-  try {
-    const r = await fetch(url);
-    const data = await r.json();
-    const events = data.events || [];
-    const sample = events.slice(0, 3).map(e => ({
-      name: e.name,
-      competitors: e.competitions?.[0]?.competitors?.map(c => ({
-        team: c.team?.displayName,
-        seed: c.seed,
-        homeAway: c.homeAway,
-        score: c.score,
-        winner: c.winner,
-      })),
-      status: e.competitions?.[0]?.status?.type?.description,
-      notes: e.competitions?.[0]?.notes,
-    }));
-    res.json({ totalEvents: events.length, sample });
-  } catch(e) {
-    res.json({ error: e.message });
-  }
+  const games = await fetchAllTournamentGames("mens");
+  res.json({ totalGames: games.length, sample: games.slice(0, 5).map(g => ({
+    round: g.round, region: g.region, status: g.status,
+    home: g.home.name, away: g.away.name,
+    score: g.home.score && g.away.score ? `${g.away.score}-${g.home.score}` : "N/A"
+  }))});
 });
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
