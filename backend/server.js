@@ -34,12 +34,22 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ── ESPN API with date-range queries ─────────────────────────
 const ROUND_DATES = {
-  "First Round":   ["20260319", "20260320"],
-  "Second Round":  ["20260321", "20260322"],
-  "Sweet 16":      ["20260327", "20260328"],
-  "Elite 8":       ["20260329", "20260330"],
-  "Final Four":    ["20260404"],
-  "Championship":  ["20260406"],
+  mens: {
+    "First Round":  ["20260319", "20260320"],
+    "Second Round": ["20260321", "20260322"],
+    "Sweet 16":     ["20260327", "20260328"],
+    "Elite 8":      ["20260329", "20260330"],
+    "Final Four":   ["20260404"],
+    "Championship": ["20260406"],
+  },
+  womens: {
+    "First Round":  ["20260320", "20260321"],
+    "Second Round": ["20260322", "20260323"],
+    "Sweet 16":     ["20260327", "20260328"],
+    "Elite 8":      ["20260329", "20260330"],
+    "Final Four":   ["20260403"],
+    "Championship": ["20260405"],
+  },
 };
 
 const ESPN_RANKINGS = {
@@ -64,9 +74,10 @@ async function safeFetch(url) {
   }
 }
 
-function getRoundFromDate(dateStr) {
-  for (const [round, dates] of Object.entries(ROUND_DATES)) {
-    if (dates.includes(dateStr)) return round;
+function getRoundFromDate(dateStr, tournament) {
+  const dates = ROUND_DATES[tournament] || ROUND_DATES.mens;
+  for (const [round, roundDates] of Object.entries(dates)) {
+    if (roundDates.includes(dateStr)) return round;
   }
   return null;
 }
@@ -103,14 +114,15 @@ async function fetchAllTournamentGames(tournament) {
     : "mens-college-basketball";
   const allGames = [];
 
-  const allDates = Object.values(ROUND_DATES).flat();
+  const roundDates = ROUND_DATES[tournament] || ROUND_DATES.mens;
+  const allDates = Object.values(roundDates).flat();
 
   await Promise.all(allDates.map(async (dateStr) => {
     const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/${league}/scoreboard?dates=${dateStr}&groups=100&limit=100`;
     const data = await safeFetch(url);
     if (!data?.events?.length) return;
 
-    const round = getRoundFromDate(dateStr);
+    const round = getRoundFromDate(dateStr, tournament);
 
     // Filter to NCAA tournament games using notes headline
     const tourneyEvents = data.events.filter(isTournamentGame);
