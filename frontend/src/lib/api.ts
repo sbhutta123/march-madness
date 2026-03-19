@@ -1,16 +1,28 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
+export interface PossibleOpponent {
+  name: string;
+  seed: number | null;
+  record: string;
+  confirmed: boolean;
+}
+
+export interface TeamGame {
+  round: string;
+  date: string | null;
+  status: string;
+  opponent: string;
+  opponentSeed: number | null;
+  gameId: string | null;
+  region: string | null;
+  possibleOpponents?: PossibleOpponent[];
+}
+
 export interface TeamInfo {
   name: string;
   seed: number | null;
   record: string;
-  games: {
-    round: string;
-    opponent: string;
-    opponentSeed: number | null;
-    status: string;
-    gameId: string;
-  }[];
+  games: TeamGame[];
 }
 
 export interface BracketData {
@@ -23,6 +35,7 @@ export interface GameInfo {
   name: string;
   round: string;
   status: string;
+  region: string | null;
   home: { name: string; seed: number | null; score: string | null; record: string; winner: boolean };
   away: { name: string; seed: number | null; score: string | null; record: string; winner: boolean };
 }
