@@ -72,11 +72,12 @@ function getRoundFromDate(dateStr) {
 }
 
 function parseESPNCompetitor(c) {
+  const seed = c?.seed || c?.curatedRank?.current || null;
   return {
     name: c?.team?.displayName || "TBD",
-    seed: c?.seed ? parseInt(c.seed) : null,
+    seed: seed ? parseInt(seed) : null,
     score: c?.score || null,
-    record: c?.records?.[0]?.summary || "",
+    record: c?.records?.[0]?.summary || c?.team?.record || "",
     winner: c?.winner || false,
   };
 }

@@ -111,13 +111,14 @@ export default function PredictorForm() {
     }
 
     // Find upcoming (not final) game = current round
-    const upcoming = games.find(g =>
-      !g.status?.toLowerCase().includes("final") && g.opponent !== "TBD"
-    );
+    const upcoming = games.find(g => {
+      const s = g.status?.toLowerCase() || "";
+      return !s.includes("final") && g.opponent && g.opponent !== "TBD";
+    });
 
     // Find future rounds (possibleOpponents entries)
     const future = games
-      .filter(g => g.possibleOpponents && g.possibleOpponents.length > 0)
+      .filter(g => g.possibleOpponents && g.possibleOpponents.length > 0 && g.opponent === "TBD")
       .map(g => normalizeRound(g.round))
       .filter(r => ALL_ROUNDS.includes(r));
 
@@ -127,7 +128,7 @@ export default function PredictorForm() {
     } else {
       // All games are final — eliminated
       const completedRounds = games
-        .filter(g => g.status?.toLowerCase().includes("final"))
+        .filter(g => g.status?.toLowerCase().includes("final") || g.status?.toLowerCase().includes("post"))
         .map(g => normalizeRound(g.round));
       setCurrentRound(completedRounds[completedRounds.length - 1] || "");
       setTeamEliminated(true);
