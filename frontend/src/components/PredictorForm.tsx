@@ -113,7 +113,7 @@ export default function PredictorForm() {
       setRound(upcomingRound || futureRounds[0]);
       setTeamEliminated(false);
     } else if (completedGames.length > 0) {
-      const roundLabels = [...new Set(games.map(g => normalizeRound(g.round)).filter(r => ALL_ROUNDS.includes(r)))];
+      const roundLabels = Array.from(new Set(games.map(g => normalizeRound(g.round)).filter(r => ALL_ROUNDS.includes(r))));
       roundLabels.sort((a, b) => ALL_ROUNDS.indexOf(a) - ALL_ROUNDS.indexOf(b));
       setAvailableRounds(roundLabels.length > 0 ? roundLabels : ALL_ROUNDS);
       setRound(roundLabels[roundLabels.length - 1] || ALL_ROUNDS[0]);
