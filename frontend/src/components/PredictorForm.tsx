@@ -5,6 +5,7 @@ import { fetchBracket, fetchPrediction, Prediction, TeamInfo, PossibleOpponent }
 import ResultCard from "./ResultCard";
 
 type Tournament = "mens" | "womens";
+type RoundMode = "current" | "future";
 
 const ALL_ROUNDS = ["First Round", "Second Round", "Sweet 16", "Elite 8", "Final Four", "Championship"];
 
@@ -43,13 +44,15 @@ export default function PredictorForm() {
   const [team1Selected, setTeam1Selected] = useState<TeamInfo | null>(null);
   const [team1Open, setTeam1Open] = useState(false);
 
+  const [roundMode, setRoundMode] = useState<RoundMode>("current");
+  const [currentRound, setCurrentRound] = useState<string>("");
+  const [futureRound, setFutureRound] = useState<string>("");
+  const [futureRounds, setFutureRounds] = useState<string[]>([]);
+
   const [team2Name, setTeam2Name] = useState("");
   const [team2Seed, setTeam2Seed] = useState<number | null>(null);
   const [possibleOpponents, setPossibleOpponents] = useState<PossibleOpponent[]>([]);
   const [opponentConfirmed, setOpponentConfirmed] = useState(false);
-
-  const [availableRounds, setAvailableRounds] = useState<string[]>(ALL_ROUNDS);
-  const [round, setRound] = useState(ALL_ROUNDS[0]);
   const [teamEliminated, setTeamEliminated] = useState(false);
 
   const [freeform, setFreeform] = useState("");
@@ -60,17 +63,16 @@ export default function PredictorForm() {
 
   const team1Ref = useRef<HTMLDivElement>(null);
 
-  // Load teams on tournament change
+  // Load teams when tournament changes
   useEffect(() => {
     setAllTeams([]);
     setTeam1Selected(null);
     setTeam1Search("");
-    setTeam2Name("");
-    setTeam2Seed(null);
-    setPossibleOpponents([]);
-    setOpponentConfirmed(false);
-    setAvailableRounds(ALL_ROUNDS);
-    setRound(ALL_ROUNDS[0]);
+    resetOpponent();
+    setCurrentRound("");
+    setFutureRound("");
+    setFutureRounds([]);
+    setRoundMode("current");
     setTeamEliminated(false);
     setResult(null);
     setError(null);
@@ -82,89 +84,82 @@ export default function PredictorForm() {
       .finally(() => setLoadingTeams(false));
   }, [tournament]);
 
-  // When team1 changes, set available rounds
+  function resetOpponent() {
+    setTeam2Name("");
+    setTeam2Seed(null);
+    setPossibleOpponents([]);
+    setOpponentConfirmed(false);
+  }
+
+  // When team1 changes, determine current round and future rounds
   useEffect(() => {
+    resetOpponent();
     if (!team1Selected) {
-      setAvailableRounds(ALL_ROUNDS);
-      setRound(ALL_ROUNDS[0]);
-      setTeam2Name("");
-      setTeam2Seed(null);
-      setPossibleOpponents([]);
-      setOpponentConfirmed(false);
+      setCurrentRound("");
+      setFutureRounds([]);
+      setFutureRound("");
       setTeamEliminated(false);
       return;
     }
 
     const games = team1Selected.games;
     if (!games.length) {
-      setAvailableRounds(ALL_ROUNDS);
-      setRound(ALL_ROUNDS[0]);
+      setCurrentRound("");
+      setFutureRounds([]);
+      setTeamEliminated(false);
       return;
     }
 
-    const completedGames = games.filter(g => g.status?.toLowerCase().includes("final"));
-    const upcomingGame = games.find(g => !g.status?.toLowerCase().includes("final"));
+    // Find upcoming (not final) game = current round
+    const upcoming = games.find(g =>
+      !g.status?.toLowerCase().includes("final") && g.opponent !== "TBD"
+    );
 
-    if (upcomingGame) {
-      const upcomingRound = normalizeRound(upcomingGame.round);
-      const upcomingIdx = ALL_ROUNDS.indexOf(upcomingRound);
-      const futureRounds = upcomingIdx >= 0 ? ALL_ROUNDS.slice(upcomingIdx) : ALL_ROUNDS;
-      setAvailableRounds(futureRounds);
-      setRound(upcomingRound || futureRounds[0]);
+    // Find future rounds (possibleOpponents entries)
+    const future = games
+      .filter(g => g.possibleOpponents && g.possibleOpponents.length > 0)
+      .map(g => normalizeRound(g.round))
+      .filter(r => ALL_ROUNDS.includes(r));
+
+    if (upcoming) {
+      setCurrentRound(normalizeRound(upcoming.round));
       setTeamEliminated(false);
-    } else if (completedGames.length > 0) {
-      const roundLabels = Array.from(new Set(games.map(g => normalizeRound(g.round)).filter(r => ALL_ROUNDS.includes(r))));
-      roundLabels.sort((a, b) => ALL_ROUNDS.indexOf(a) - ALL_ROUNDS.indexOf(b));
-      setAvailableRounds(roundLabels.length > 0 ? roundLabels : ALL_ROUNDS);
-      setRound(roundLabels[roundLabels.length - 1] || ALL_ROUNDS[0]);
-      setTeamEliminated(true);
     } else {
-      setAvailableRounds(ALL_ROUNDS);
-      setRound(ALL_ROUNDS[0]);
-      setTeamEliminated(false);
+      // All games are final — eliminated
+      const completedRounds = games
+        .filter(g => g.status?.toLowerCase().includes("final"))
+        .map(g => normalizeRound(g.round));
+      setCurrentRound(completedRounds[completedRounds.length - 1] || "");
+      setTeamEliminated(true);
     }
+
+    setFutureRounds(future);
+    setFutureRound(future[0] || "");
+    setRoundMode("current");
   }, [team1Selected]);
 
-  // When round changes, resolve opponent
+  // Resolve opponent whenever roundMode, currentRound, or futureRound changes
   useEffect(() => {
-    if (!team1Selected) {
-      setTeam2Name("");
-      setTeam2Seed(null);
-      setPossibleOpponents([]);
-      setOpponentConfirmed(false);
-      return;
-    }
+    resetOpponent();
+    if (!team1Selected) return;
 
-    const game = team1Selected.games.find(g => normalizeRound(g.round) === round);
+    const targetRound = roundMode === "current" ? currentRound : futureRound;
+    if (!targetRound) return;
 
-    if (game) {
-      if (game.opponent && game.opponent !== "TBD") {
-        // Confirmed opponent
-        setTeam2Name(game.opponent);
-        setTeam2Seed(game.opponentSeed);
-        setPossibleOpponents([]);
-        setOpponentConfirmed(true);
-      } else if (game.possibleOpponents && game.possibleOpponents.length > 0) {
-        // Future round — show possible opponents
-        setTeam2Name("");
-        setTeam2Seed(null);
-        setPossibleOpponents(game.possibleOpponents);
-        setOpponentConfirmed(false);
-      } else {
-        setTeam2Name("TBD");
-        setTeam2Seed(null);
-        setPossibleOpponents([]);
-        setOpponentConfirmed(false);
-      }
-    } else {
-      setTeam2Name("");
-      setTeam2Seed(null);
-      setPossibleOpponents([]);
+    const game = team1Selected.games.find(g => normalizeRound(g.round) === targetRound);
+    if (!game) return;
+
+    if (roundMode === "current" && game.opponent && game.opponent !== "TBD") {
+      setTeam2Name(game.opponent);
+      setTeam2Seed(game.opponentSeed);
+      setOpponentConfirmed(true);
+    } else if (roundMode === "future" && game.possibleOpponents?.length) {
+      setPossibleOpponents(game.possibleOpponents);
       setOpponentConfirmed(false);
     }
-  }, [team1Selected, round]);
+  }, [roundMode, currentRound, futureRound, team1Selected]);
 
-  // Outside click closes dropdown
+  // Close dropdown on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (team1Ref.current && !team1Ref.current.contains(e.target as Node)) {
@@ -191,14 +186,22 @@ export default function PredictorForm() {
     setOpponentConfirmed(true);
   }
 
+  const activeRound = roundMode === "current" ? currentRound : futureRound;
+
   async function handlePredict() {
-    if (!team1Selected || !team2Name || team2Name === "TBD") return;
+    if (!team1Selected || !team2Name) return;
     setError(null);
     setResult(null);
     setMatchupLabel(`${team1Selected.name} vs ${team2Name}`);
     setLoading(true);
     try {
-      const pred = await fetchPrediction({ tournament, team1: team1Selected.name, team2: team2Name, round, mode: "predict" });
+      const pred = await fetchPrediction({
+        tournament,
+        team1: team1Selected.name,
+        team2: team2Name,
+        round: activeRound,
+        mode: "predict",
+      });
       setResult(pred);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
@@ -223,7 +226,7 @@ export default function PredictorForm() {
     }
   }
 
-  const canPredict = team1Selected && team2Name && team2Name !== "TBD" && !loading && !teamEliminated;
+  const canPredict = team1Selected && team2Name && !loading && !teamEliminated;
   const canAnalyze = freeform.trim().length > 0 && !loading;
 
   return (
@@ -234,8 +237,9 @@ export default function PredictorForm() {
         {(["mens", "womens"] as Tournament[]).map(t => (
           <button key={t} onClick={() => setTournament(t)}
             className={`px-5 py-2 rounded-full text-sm font-medium transition-all duration-200 border ${
-              tournament === t ? "bg-orange-500 border-orange-500 text-white"
-              : "bg-transparent border-white/20 text-net/60 hover:border-white/40 hover:text-net"
+              tournament === t
+                ? "bg-orange-500 border-orange-500 text-white"
+                : "bg-transparent border-white/20 text-net/60 hover:border-white/40 hover:text-net"
             }`}>
             {t === "mens" ? "Men's" : "Women's"} Tournament
           </button>
@@ -246,57 +250,103 @@ export default function PredictorForm() {
       <div className="bg-court-700/60 border border-white/10 rounded-2xl p-5 space-y-4 backdrop-blur-sm">
         <p className="text-xs text-orange-400/80 uppercase tracking-widest font-medium">Predict a matchup</p>
 
-        <div className="grid grid-cols-2 gap-3">
-          {/* Team 1 searchable dropdown */}
-          <div ref={team1Ref} className="relative">
-            <label className="text-xs text-net/50 mb-1 block">Team</label>
-            <input
-              value={team1Search}
-              onChange={e => { setTeam1Search(e.target.value); setTeam1Open(true); setTeam1Selected(null); setTeam2Name(""); setPossibleOpponents([]); }}
-              onFocus={() => setTeam1Open(true)}
-              placeholder={loadingTeams ? "Loading teams..." : "Search team..."}
-              disabled={loadingTeams}
-              className="w-full bg-court-900/80 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-net placeholder-net/25 focus:outline-none focus:border-orange-500/60 transition-colors"
-            />
-            {team1Open && filteredTeams.length > 0 && (
-              <div className="absolute z-20 top-full mt-1 w-full bg-court-800 border border-white/15 rounded-xl overflow-hidden shadow-xl max-h-52 overflow-y-auto">
-                {filteredTeams.map(team => (
-                  <button key={team.name} onClick={() => selectTeam1(team)}
-                    className="w-full text-left px-4 py-2.5 text-sm text-net hover:bg-white/8 flex items-center justify-between gap-2 transition-colors">
-                    <span>{team.name}</span>
-                    <span className="text-xs text-net/40 shrink-0">{team.seed ? `#${team.seed}` : ""} {team.record}</span>
-                  </button>
-                ))}
-              </div>
+        {/* Team 1 search */}
+        <div ref={team1Ref} className="relative">
+          <label className="text-xs text-net/50 mb-1 block">Team</label>
+          <input
+            value={team1Search}
+            onChange={e => { setTeam1Search(e.target.value); setTeam1Open(true); setTeam1Selected(null); resetOpponent(); }}
+            onFocus={() => setTeam1Open(true)}
+            placeholder={loadingTeams ? "Loading teams..." : "Search team..."}
+            disabled={loadingTeams}
+            className="w-full bg-court-900/80 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-net placeholder-net/25 focus:outline-none focus:border-orange-500/60 transition-colors"
+          />
+          {team1Open && filteredTeams.length > 0 && (
+            <div className="absolute z-20 top-full mt-1 w-full bg-court-800 border border-white/15 rounded-xl overflow-hidden shadow-xl max-h-52 overflow-y-auto">
+              {filteredTeams.map(team => (
+                <button key={team.name} onClick={() => selectTeam1(team)}
+                  className="w-full text-left px-4 py-2.5 text-sm text-net hover:bg-white/8 flex items-center justify-between gap-2 transition-colors">
+                  <span>{team.name}</span>
+                  <span className="text-xs text-net/40 shrink-0">{team.seed ? `#${team.seed}` : ""} {team.record}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Round mode toggle — only show if team is selected */}
+        {team1Selected && !teamEliminated && (
+          <div>
+            <label className="text-xs text-net/50 mb-2 block">Round</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setRoundMode("current")}
+                className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-all duration-150 ${
+                  roundMode === "current"
+                    ? "bg-orange-500/20 border-orange-500/50 text-orange-400"
+                    : "bg-transparent border-white/10 text-net/40 hover:border-white/25 hover:text-net/60"
+                }`}>
+                Current Round
+                {currentRound && <span className="ml-1.5 text-xs opacity-70">· {currentRound}</span>}
+              </button>
+              {futureRounds.length > 0 && (
+                <button
+                  onClick={() => setRoundMode("future")}
+                  className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-all duration-150 ${
+                    roundMode === "future"
+                      ? "bg-orange-500/20 border-orange-500/50 text-orange-400"
+                      : "bg-transparent border-white/10 text-net/40 hover:border-white/25 hover:text-net/60"
+                  }`}>
+                  Future Round
+                </button>
+              )}
+            </div>
+
+            {/* Future round selector */}
+            {roundMode === "future" && futureRounds.length > 1 && (
+              <select
+                value={futureRound}
+                onChange={e => setFutureRound(e.target.value)}
+                className="w-full mt-2 bg-court-900/80 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-net focus:outline-none focus:border-orange-500/60 transition-colors">
+                {futureRounds.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
             )}
           </div>
+        )}
 
-          {/* Team 2 — confirmed or picker */}
+        {/* Opponent */}
+        {team1Selected && (
           <div>
             <label className="text-xs text-net/50 mb-1 block">
               Opponent
-              {possibleOpponents.length > 0 && !opponentConfirmed && (
+              {roundMode === "future" && !opponentConfirmed && possibleOpponents.length > 0 && (
                 <span className="ml-2 text-amber-400/70">— select possible opponent</span>
               )}
             </label>
+
+            {/* Confirmed opponent */}
             {opponentConfirmed && team2Name ? (
-              <div className={`w-full bg-court-900/80 border rounded-xl px-4 py-2.5 text-sm flex items-center justify-between ${
-                team2Name !== "TBD" ? "border-orange-500/30 text-net" : "border-white/10 text-net/30"
-              }`}>
+              <div className="w-full bg-court-900/80 border border-orange-500/30 rounded-xl px-4 py-2.5 text-sm text-net flex items-center justify-between">
                 <span>
                   {team2Name}
-                  {team2Seed ? <span className="text-net/40 text-xs ml-1">(#{team2Seed})</span> : ""}
+                  {team2Seed && <span className="text-net/40 text-xs ml-1">(#{team2Seed})</span>}
                 </span>
-                {possibleOpponents.length > 0 && (
+                {roundMode === "future" && (
                   <button onClick={() => { setOpponentConfirmed(false); setTeam2Name(""); }}
                     className="text-xs text-net/30 hover:text-net/60 ml-2">change</button>
                 )}
               </div>
+            ) : roundMode === "current" ? (
+              /* Current round — auto-filling */
+              <div className="w-full bg-court-900/80 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-net/30 min-h-[42px] flex items-center">
+                Auto-filled from bracket
+              </div>
             ) : possibleOpponents.length > 0 ? (
-              <div className="bg-court-900/80 border border-amber-500/20 rounded-xl overflow-hidden max-h-36 overflow-y-auto">
+              /* Future round — possible opponents list */
+              <div className="bg-court-900/80 border border-amber-500/20 rounded-xl overflow-hidden max-h-40 overflow-y-auto">
                 {possibleOpponents.map(opp => (
                   <button key={opp.name} onClick={() => selectPossibleOpponent(opp)}
-                    className="w-full text-left px-4 py-2 text-sm text-net hover:bg-white/8 flex items-center justify-between transition-colors border-b border-white/5 last:border-0">
+                    className="w-full text-left px-4 py-2.5 text-sm text-net hover:bg-white/8 flex items-center justify-between transition-colors border-b border-white/5 last:border-0">
                     <span>{opp.name}</span>
                     <span className="text-xs text-net/40 shrink-0">
                       {opp.seed ? `#${opp.seed}` : ""} {opp.record}
@@ -305,25 +355,12 @@ export default function PredictorForm() {
                   </button>
                 ))}
               </div>
-            ) : (
-              <div className="w-full bg-court-900/80 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-net/25 min-h-[42px] flex items-center">
-                {team2Name || "Auto-filled from bracket"}
-              </div>
-            )}
+            ) : null}
           </div>
-        </div>
-
-        {/* Round dropdown */}
-        <div>
-          <label className="text-xs text-net/50 mb-1 block">Round</label>
-          <select value={round} onChange={e => setRound(e.target.value)}
-            className="w-full bg-court-900/80 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-net focus:outline-none focus:border-orange-500/60 transition-colors">
-            {availableRounds.map(r => <option key={r} value={r}>{r}</option>)}
-          </select>
-        </div>
+        )}
 
         {teamEliminated && team1Selected && (
-          <p className="text-xs text-red-400/70 text-center">{team1Selected.name} has been eliminated from the tournament.</p>
+          <p className="text-xs text-red-400/70 text-center">{team1Selected.name} has been eliminated.</p>
         )}
 
         <button onClick={handlePredict} disabled={!canPredict}
@@ -368,7 +405,7 @@ export default function PredictorForm() {
       )}
 
       {result && !loading && (
-        <ResultCard prediction={result} matchupLabel={matchupLabel} tournament={tournament} round={round} />
+        <ResultCard prediction={result} matchupLabel={matchupLabel} tournament={tournament} round={activeRound} />
       )}
     </div>
   );
