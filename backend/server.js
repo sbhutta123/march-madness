@@ -42,59 +42,6 @@ const ROUND_DATES = {
   "Championship":  ["20260406"],
 };
 
-// ── Hardcoded 2026 bracket fallback ──────────────────────────
-// Results confirmed as of March 19 First Round (Thursday games)
-// winner:true = confirmed winner, winner:false = lost or not yet played
-const MENS_BRACKET_2026 = [
-  // East Region — 1/2/3 line
-  { id:"e1",  round:"First Round", region:"East",    status:"scheduled", home:{name:"Duke",          seed:1,  record:"32-3",  score:null, winner:false}, away:{name:"Siena",            seed:16, record:"24-10", score:null, winner:false} },
-  { id:"e2",  round:"First Round", region:"East",    status:"final",     home:{name:"Ohio State",    seed:8,  record:"24-8",  score:"64", winner:false}, away:{name:"TCU",              seed:9,  record:"22-12", score:"66", winner:true } },
-  { id:"e3",  round:"First Round", region:"East",    status:"scheduled", home:{name:"St. John's",    seed:5,  record:"28-6",  score:null, winner:false}, away:{name:"Northern Iowa",    seed:12, record:"22-11", score:null, winner:false} },
-  { id:"e4",  round:"First Round", region:"East",    status:"scheduled", home:{name:"Kansas",        seed:4,  record:"25-9",  score:null, winner:false}, away:{name:"California Baptist",seed:13, record:"25-8",  score:null, winner:false} },
-  { id:"e5",  round:"First Round", region:"East",    status:"final",     home:{name:"Nebraska",      seed:4,  record:"28-6",  score:"76", winner:true }, away:{name:"Troy",             seed:13, record:"22-13", score:"47", winner:false} },
-  { id:"e6",  round:"First Round", region:"East",    status:"final",     home:{name:"Wisconsin",     seed:5,  record:"21-13", score:"82", winner:false}, away:{name:"High Point",       seed:12, record:"29-6",  score:"83", winner:true } },
-  { id:"e7",  round:"First Round", region:"East",    status:"final",     home:{name:"Louisville",    seed:6,  record:"24-10", score:"83", winner:true }, away:{name:"South Florida",    seed:11, record:"22-12", score:"79", winner:false} },
-  { id:"e8",  round:"First Round", region:"East",    status:"scheduled", home:{name:"UConn",         seed:3,  record:"26-8",  score:null, winner:false}, away:{name:"VCU",              seed:14, record:"24-10", score:null, winner:false} },
-  // West Region
-  { id:"w1",  round:"First Round", region:"West",    status:"scheduled", home:{name:"Florida",       seed:1,  record:"30-5",  score:null, winner:false}, away:{name:"Norfolk State",    seed:16, record:"25-9",  score:null, winner:false} },
-  { id:"w2",  round:"First Round", region:"West",    status:"scheduled", home:{name:"BYU",           seed:4,  record:"24-9",  score:null, winner:false}, away:{name:"Akron",            seed:13, record:"22-11", score:null, winner:false} },
-  { id:"w3",  round:"First Round", region:"West",    status:"scheduled", home:{name:"Gonzaga",       seed:3,  record:"28-6",  score:null, winner:false}, away:{name:"McNeese",          seed:14, record:"28-5",  score:null, winner:false} },
-  { id:"w4",  round:"First Round", region:"West",    status:"scheduled", home:{name:"Vanderbilt",    seed:6,  record:"22-13", score:null, winner:false}, away:{name:"Oral Roberts",     seed:11, record:"20-14", score:null, winner:false} },
-  { id:"w5",  round:"First Round", region:"West",    status:"scheduled", home:{name:"UCLA",          seed:7,  record:"20-13", score:null, winner:false}, away:{name:"Utah State",       seed:10, record:"25-9",  score:null, winner:false} },
-  { id:"w6",  round:"First Round", region:"West",    status:"scheduled", home:{name:"Arizona",       seed:2,  record:"27-7",  score:null, winner:false}, away:{name:"Cal Baptist",      seed:15, record:"26-8",  score:null, winner:false} },
-  { id:"w7",  round:"First Round", region:"West",    status:"scheduled", home:{name:"Missouri",      seed:5,  record:"23-11", score:null, winner:false}, away:{name:"Drake",            seed:12, record:"24-9",  score:null, winner:false} },
-  { id:"w8",  round:"First Round", region:"West",    status:"scheduled", home:{name:"Texas Tech",    seed:8,  record:"22-12", score:null, winner:false}, away:{name:"NC State",         seed:9,  record:"20-14", score:null, winner:false} },
-  // South Region
-  { id:"s1",  round:"First Round", region:"South",   status:"scheduled", home:{name:"Houston",       seed:2,  record:"27-7",  score:null, winner:false}, away:{name:"SFA",              seed:15, record:"24-9",  score:null, winner:false} },
-  { id:"s2",  round:"First Round", region:"South",   status:"scheduled", home:{name:"Alabama",       seed:3,  record:"26-8",  score:null, winner:false}, away:{name:"Robert Morris",    seed:14, record:"22-12", score:null, winner:false} },
-  { id:"s3",  round:"First Round", region:"South",   status:"scheduled", home:{name:"Michigan",      seed:1,  record:"29-6",  score:null, winner:false}, away:{name:"UMES",             seed:16, record:"20-14", score:null, winner:false} },
-  { id:"s4",  round:"First Round", region:"South",   status:"scheduled", home:{name:"Iowa State",    seed:2,  record:"25-8",  score:null, winner:false}, away:{name:"Lipscomb",         seed:15, record:"23-11", score:null, winner:false} },
-  { id:"s5",  round:"First Round", region:"South",   status:"scheduled", home:{name:"Marquette",     seed:6,  record:"22-12", score:null, winner:false}, away:{name:"New Mexico",       seed:11, record:"24-10", score:null, winner:false} },
-  { id:"s6",  round:"First Round", region:"South",   status:"scheduled", home:{name:"Ole Miss",      seed:7,  record:"21-13", score:null, winner:false}, away:{name:"Colorado State",   seed:10, record:"23-11", score:null, winner:false} },
-  { id:"s7",  round:"First Round", region:"South",   status:"scheduled", home:{name:"Baylor",        seed:5,  record:"23-11", score:null, winner:false}, away:{name:"James Madison",    seed:12, record:"25-9",  score:null, winner:false} },
-  { id:"s8",  round:"First Round", region:"South",   status:"scheduled", home:{name:"Creighton",     seed:4,  record:"24-10", score:null, winner:false}, away:{name:"Montana",          seed:13, record:"24-8",  score:null, winner:false} },
-  // Midwest Region
-  { id:"m1",  round:"First Round", region:"Midwest", status:"scheduled", home:{name:"Auburn",        seed:1,  record:"30-4",  score:null, winner:false}, away:{name:"Jacksonville State",seed:16, record:"21-13", score:null, winner:false} },
-  { id:"m2",  round:"First Round", region:"Midwest", status:"scheduled", home:{name:"Tennessee",     seed:2,  record:"27-7",  score:null, winner:false}, away:{name:"Wofford",          seed:15, record:"23-10", score:null, winner:false} },
-  { id:"m3",  round:"First Round", region:"Midwest", status:"scheduled", home:{name:"Kentucky",      seed:3,  record:"25-9",  score:null, winner:false}, away:{name:"Troy",             seed:14, record:"20-14", score:null, winner:false} },
-  { id:"m4",  round:"First Round", region:"Midwest", status:"scheduled", home:{name:"Purdue",        seed:4,  record:"24-10", score:null, winner:false}, away:{name:"Yale",             seed:13, record:"24-7",  score:null, winner:false} },
-  { id:"m5",  round:"First Round", region:"Midwest", status:"scheduled", home:{name:"Indiana",       seed:5,  record:"22-12", score:null, winner:false}, away:{name:"High Point",       seed:12, record:"29-6",  score:null, winner:false} },
-  { id:"m6",  round:"First Round", region:"Midwest", status:"scheduled", home:{name:"Illinois",      seed:6,  record:"21-13", score:null, winner:false}, away:{name:"Texas",            seed:11, record:"19-15", score:null, winner:false} },
-  { id:"m7",  round:"First Round", region:"Midwest", status:"scheduled", home:{name:"Kansas State",  seed:7,  record:"22-12", score:null, winner:false}, away:{name:"Arkansas",         seed:10, record:"21-13", score:null, winner:false} },
-  { id:"m8",  round:"First Round", region:"Midwest", status:"scheduled", home:{name:"Mississippi State",seed:8,record:"22-12",score:null, winner:false}, away:{name:"Pittsburgh",       seed:9,  record:"21-13", score:null, winner:false} },
-];
-
-const WOMENS_BRACKET_2026 = [
-  { id:"we1", round:"First Round", region:"Albany", home:{name:"South Carolina",seed:1,record:"33-1",score:null,winner:false}, away:{name:"Sacred Heart",seed:16,record:"20-12",score:null,winner:false} },
-  { id:"we2", round:"First Round", region:"Albany", home:{name:"Notre Dame",seed:2,record:"27-6",score:null,winner:false}, away:{name:"Fordham",seed:15,record:"21-11",score:null,winner:false} },
-  { id:"we3", round:"First Round", region:"Spokane", home:{name:"UCLA",seed:1,record:"29-5",score:null,winner:false}, away:{name:"UMES",seed:16,record:"18-14",score:null,winner:false} },
-  { id:"we4", round:"First Round", region:"Spokane", home:{name:"LSU",seed:2,record:"26-7",score:null,winner:false}, away:{name:"Chattanooga",seed:15,record:"24-9",score:null,winner:false} },
-  { id:"we5", round:"First Round", region:"Portland", home:{name:"Texas",seed:1,record:"28-5",score:null,winner:false}, away:{name:"Alabama A&M",seed:16,record:"17-15",score:null,winner:false} },
-  { id:"we6", round:"First Round", region:"Portland", home:{name:"NC State",seed:3,record:"25-8",score:null,winner:false}, away:{name:"Richmond",seed:14,record:"22-10",score:null,winner:false} },
-  { id:"we7", round:"First Round", region:"Greensboro", home:{name:"TCU",seed:1,record:"29-4",score:null,winner:false}, away:{name:"Bethune-Cookman",seed:16,record:"19-13",score:null,winner:false} },
-  { id:"we8", round:"First Round", region:"Greensboro", home:{name:"UConn",seed:2,record:"28-5",score:null,winner:false}, away:{name:"FGCU",seed:15,record:"25-8",score:null,winner:false} },
-];
-
 const ESPN_RANKINGS = {
   mens: "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/rankings",
   womens: "https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/rankings",
@@ -187,11 +134,6 @@ async function fetchAllTournamentGames(tournament) {
       });
     });
   }));
-
-  if (allGames.length === 0) {
-    console.log("ESPN returned no tournament games — using hardcoded fallback");
-    return tournament === "womens" ? WOMENS_BRACKET_2026 : MENS_BRACKET_2026;
-  }
 
   console.log(`Total tournament games fetched: ${allGames.length}`);
   return allGames;
@@ -440,13 +382,15 @@ IMPORTANT: Before predicting, use web search to find current injury reports, rec
   }
 });
 
-app.get("/api/test", async (_req, res) => {
-  const games = await fetchAllTournamentGames("mens");
-  res.json({ totalGames: games.length, sample: games.slice(0, 5).map(g => ({
-    round: g.round, region: g.region, status: g.status,
-    home: g.home.name, away: g.away.name,
-    score: g.home.score && g.away.score ? `${g.away.score}-${g.home.score}` : "N/A"
-  }))});
+app.get("/api/status", async (_req, res) => {
+  const [mens, womens] = await Promise.all([
+    fetchAllTournamentGames("mens"),
+    fetchAllTournamentGames("womens"),
+  ]);
+  res.json({
+    mens: { games: mens.length, live: mens.filter(g => g.status === "In Progress").length },
+    womens: { games: womens.length, live: womens.filter(g => g.status === "In Progress").length },
+  });
 });
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
