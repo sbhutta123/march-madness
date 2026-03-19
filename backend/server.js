@@ -33,11 +33,14 @@ app.use("/api/", limiter);
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ── ESPN API URLs ─────────────────────────────────────────────
-const URLS = {
-  mensRankings: "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/rankings",
-  womensRankings: "https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/rankings",
-  mensScoreboard: "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?groups=100&limit=200",
-  womensScoreboard: "https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/scoreboard?groups=500&limit=200",
+const BRACKET_URLS = {
+  mens: "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?groups=100&limit=200",
+  womens: "https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/scoreboard?groups=500&limit=200",
+};
+
+const RANKINGS_URLS = {
+  mens: "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/rankings",
+  womens: "https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/rankings",
 };
 
 async function safeFetch(url) {
@@ -50,124 +53,174 @@ async function safeFetch(url) {
   }
 }
 
-async function fetchESPNContext(tournament) {
-  const isMens = tournament !== "womens";
-  const sections = [];
+// Returns all bracket games with teams, seeds, scores, and round info
+async function fetchBracket(tournament) {
+  const data = await safeFetch(BRACKET_URLS[tournament]);
+  if (!data?.events?.length) return [];
 
-  // 1. Rankings (AP Top 25)
-  const rankingsData = await safeFetch(isMens ? URLS.mensRankings : URLS.womensRankings);
-  if (rankingsData) {
-    const poll = rankingsData.rankings?.find(r =>
-      r.name?.toLowerCase().includes("ap") || r.name?.toLowerCase().includes("coaches")
-    ) || rankingsData.rankings?.[0];
+  return data.events.map((event) => {
+    const comp = event.competitions?.[0];
+    const competitors = comp?.competitors || [];
+    const home = competitors.find((c) => c.homeAway === "home");
+    const away = competitors.find((c) => c.homeAway === "away");
 
-    if (poll?.ranks?.length > 0) {
-      const top25 = poll.ranks.slice(0, 25).map(r => {
-        const record = r.team?.record ? ` (${r.team.record})` : "";
-        return `#${r.current} ${r.team?.displayName || r.team?.name}${record}`;
-      });
-      sections.push(`=== ${poll.name || "AP"} TOP 25 RANKINGS (2025-26 Season) ===\n${top25.join("\n")}`);
-    }
+    return {
+      id: event.id,
+      name: event.name,
+      round: event.season?.slug || comp?.series?.title || event.name || "",
+      status: comp?.status?.type?.description || "",
+      home: {
+        name: home?.team?.displayName || "TBD",
+        seed: home?.seed || null,
+        score: home?.score || null,
+        record: home?.records?.[0]?.summary || "",
+        winner: home?.winner || false,
+      },
+      away: {
+        name: away?.team?.displayName || "TBD",
+        seed: away?.seed || null,
+        score: away?.score || null,
+        record: away?.records?.[0]?.summary || "",
+        winner: away?.winner || false,
+      },
+    };
+  });
+}
+
+// Returns ranked teams list
+async function fetchRankings(tournament) {
+  const data = await safeFetch(RANKINGS_URLS[tournament]);
+  if (!data?.rankings?.length) return [];
+
+  const poll = data.rankings.find((r) =>
+    r.name?.toLowerCase().includes("ap")
+  ) || data.rankings[0];
+
+  return (poll?.ranks || []).slice(0, 25).map((r) => ({
+    rank: r.current,
+    name: r.team?.displayName || r.team?.name,
+    record: r.team?.record || "",
+  }));
+}
+
+// Build a readable context string for Claude
+function buildContext(bracket, rankings, team1, team2) {
+  const lines = [];
+
+  if (rankings.length > 0) {
+    lines.push("=== CURRENT AP RANKINGS (2025-26) ===");
+    rankings.forEach((r) => lines.push(`#${r.rank} ${r.name} (${r.record})`));
   }
 
-  // 2. Scoreboard — live tournament games OR recent regular season games
-  const scoreboardData = await safeFetch(isMens ? URLS.mensScoreboard : URLS.womensScoreboard);
-  if (scoreboardData?.events?.length > 0) {
-    const events = scoreboardData.events.slice(0, 20);
-    const games = events.map(event => {
-      const comp = event.competitions?.[0];
-      const competitors = comp?.competitors || [];
-      const home = competitors.find(c => c.homeAway === "home");
-      const away = competitors.find(c => c.homeAway === "away");
-
-      const homeName = home?.team?.displayName || "TBD";
-      const homeSeed = home?.seed ? ` (${home.seed} seed)` : "";
-      const homeScore = home?.score || "";
-      const homeRecord = home?.records?.[0]?.summary ? ` [${home.records[0].summary}]` : "";
-
-      const awayName = away?.team?.displayName || "TBD";
-      const awaySeed = away?.seed ? ` (${away.seed} seed)` : "";
-      const awayScore = away?.score || "";
-      const awayRecord = away?.records?.[0]?.summary ? ` [${away.records[0].summary}]` : "";
-
-      const status = comp?.status?.type?.description || "";
-      const isTournament = event.season?.type === 3 || event.name?.toLowerCase().includes("ncaa");
-      const label = isTournament ? "NCAA TOURNAMENT" : "Regular Season";
-
-      let gameStr = `[${label}] ${awayName}${awaySeed}${awayRecord} vs ${homeName}${homeSeed}${homeRecord}`;
-      if (homeScore && awayScore) {
-        gameStr += ` | ${awayScore}-${homeScore} [${status}]`;
-      } else {
-        gameStr += ` | ${status}`;
+  if (bracket.length > 0) {
+    lines.push("\n=== LIVE TOURNAMENT BRACKET ===");
+    bracket.forEach((g) => {
+      const away = `${g.away.name}${g.away.seed ? ` (${g.away.seed} seed)` : ""} ${g.away.record}`;
+      const home = `${g.home.name}${g.home.seed ? ` (${g.home.seed} seed)` : ""} ${g.home.record}`;
+      let line = `${away} vs ${home} | ${g.status}`;
+      if (g.away.score !== null && g.home.score !== null) {
+        line += ` | Score: ${g.away.score}-${g.home.score}`;
       }
-      return gameStr;
+      if (g.round) line += ` | ${g.round}`;
+      lines.push(line);
     });
-
-    const label = scoreboardData.events.some(e => e.season?.type === 3)
-      ? "LIVE TOURNAMENT GAMES"
-      : "RECENT GAMES (2025-26 Season)";
-
-    sections.push(`=== ${label} ===\n${games.join("\n")}`);
   }
 
-  if (sections.length === 0) {
-    return "[ESPN data currently unavailable. Use your best knowledge of the 2025-26 college basketball season.]";
-  }
-
-  return sections.join("\n\n");
+  return lines.join("\n");
 }
 
-// ── System prompt ─────────────────────────────────────────────
-const SYSTEM_PROMPT = `You are an expert NCAA March Madness analyst with deep knowledge of the 2025-26 college basketball season. You will be given LIVE real-time data from the ESPN API including current AP rankings, team records, and recent game results for this season.
+// ── /api/bracket — returns teams + scheduled opponent for a given round ───
+app.get("/api/bracket", async (req, res) => {
+  const { tournament } = req.query;
+  if (!tournament) return res.status(400).json({ error: "tournament required" });
 
-Use this live data as your PRIMARY source. Reference actual team names, records, and rankings from the data provided — not from previous seasons.
+  const bracket = await fetchBracket(tournament);
 
-Always respond with ONLY a valid JSON object — no markdown, no backticks, no extra text:
-{
-  "winner": "Team name or concise answer",
-  "confidence": 72,
-  "subtitle": "Short context (e.g. '#1 AP · 26-2 record')",
-  "keyFactors": ["Factor one", "Factor two", "Factor three"],
-  "analysis": "2-3 sentences referencing actual 2025-26 season data, rankings, and records from the live data provided.",
-  "darkHorse": "Optional upset/dark horse pick — omit this key entirely if not applicable"
-}
+  // Build team list with their current/upcoming opponent per round
+  const teams = new Map();
 
-Rules:
-- confidence must be an integer between 50 and 95
-- keyFactors must have 2-4 items
-- Always cite real current rankings and records from the ESPN data
-- If tournament bracket data is present, prioritize it over regular season data
-- darkHorse is optional`;
+  bracket.forEach((game) => {
+    [game.away, game.home].forEach((team, idx) => {
+      const opponent = idx === 0 ? game.home : game.away;
+      if (team.name && team.name !== "TBD") {
+        if (!teams.has(team.name)) {
+          teams.set(team.name, { name: team.name, seed: team.seed, record: team.record, games: [] });
+        }
+        teams.get(team.name).games.push({
+          round: game.round,
+          opponent: opponent.name,
+          opponentSeed: opponent.seed,
+          status: game.status,
+          gameId: game.id,
+        });
+      }
+    });
+  });
 
-app.get("/health", (_req, res) => res.json({ status: "ok" }));
+  const teamList = Array.from(teams.values()).sort((a, b) => {
+    if (a.seed && b.seed) return a.seed - b.seed;
+    return a.name.localeCompare(b.name);
+  });
 
+  return res.json({ ok: true, teams: teamList, games: bracket });
+});
+
+// ── /api/predict ──────────────────────────────────────────────
 app.post("/api/predict", async (req, res) => {
-  const { tournament, team1, team2, round, freeform } = req.body;
+  const { tournament, team1, team2, round, freeform, mode } = req.body;
 
   if (!tournament) {
-    return res.status(400).json({ error: "tournament is required (mens | womens)" });
+    return res.status(400).json({ error: "tournament is required" });
   }
 
   const tournamentLabel = tournament === "womens" ? "Women's NCAA 2025-26" : "Men's NCAA 2025-26";
 
-  console.log(`Fetching ESPN context for ${tournamentLabel}...`);
-  const espnContext = await fetchESPNContext(tournament);
-  const liveDataSection = `\n\n=== LIVE ESPN DATA ===\n${espnContext}\n=== END ESPN DATA ===\n`;
+  const [bracket, rankings] = await Promise.all([
+    fetchBracket(tournament),
+    fetchRankings(tournament),
+  ]);
+
+  const context = buildContext(bracket, rankings, team1, team2);
+  const liveSection = `\n\n=== LIVE ESPN DATA ===\n${context || "[ESPN data unavailable]"}\n=== END ESPN DATA ===\n`;
+
+  const systemPrompt = mode === "analyze"
+    ? `You are an expert NCAA March Madness analyst. You have live 2025-26 ESPN data including AP rankings, team records, and the current tournament bracket. Answer the user's question with deep insight, referencing actual current teams, seeds, and results from the data provided.
+
+Always respond with ONLY a valid JSON object:
+{
+  "winner": "Main answer or prediction",
+  "confidence": 72,
+  "subtitle": "Short context",
+  "keyFactors": ["Factor one", "Factor two", "Factor three"],
+  "analysis": "3-4 sentences of detailed analysis using real current data.",
+  "darkHorse": "Optional — omit key if not applicable"
+}`
+    : `You are an expert NCAA March Madness analyst. You have live 2025-26 ESPN data. Predict the winner of the given matchup using real current seeds, records, and bracket data.
+
+Always respond with ONLY a valid JSON object:
+{
+  "winner": "Winning team name",
+  "confidence": 72,
+  "subtitle": "e.g. '#2 seed vs #7 seed · East Region'",
+  "keyFactors": ["Factor one", "Factor two", "Factor three"],
+  "analysis": "2-3 sentences citing real current seeds and records.",
+  "darkHorse": "Optional upset note — omit key if not applicable"
+}`;
 
   let userMessage;
-  if (freeform) {
-    userMessage = `Tournament: ${tournamentLabel}${liveDataSection}\nQuestion: ${freeform}`;
+  if (mode === "analyze" && freeform) {
+    userMessage = `Tournament: ${tournamentLabel}${liveSection}\nQuestion: ${freeform}`;
   } else if (team1 && team2) {
-    userMessage = `Tournament: ${tournamentLabel}${liveDataSection}\nMatchup: ${team1} vs ${team2} in the ${round || "tournament"}. Predict the winner using the live 2025-26 season data above.`;
+    userMessage = `Tournament: ${tournamentLabel}${liveSection}\nMatchup: ${team1} vs ${team2}${round ? ` in the ${round}` : ""}. Predict the winner.`;
   } else {
-    return res.status(400).json({ error: "Provide either freeform or team1 + team2." });
+    return res.status(400).json({ error: "Provide team1 + team2 for predict, or freeform for analyze." });
   }
 
   try {
     const message = await anthropic.messages.create({
       model: "claude-opus-4-5",
-      max_tokens: 800,
-      system: SYSTEM_PROMPT,
+      max_tokens: 900,
+      system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],
     });
 
@@ -188,6 +241,8 @@ app.post("/api/predict", async (req, res) => {
     return res.status(500).json({ error: err.message || "Prediction failed." });
   }
 });
+
+app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 app.listen(PORT, () => {
   console.log(`🏀 March Madness API running on port ${PORT}`);
