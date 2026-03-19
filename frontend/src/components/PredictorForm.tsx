@@ -111,9 +111,10 @@ export default function PredictorForm() {
     }
 
     // Find upcoming (not final) game = current round
+    // A game is "upcoming" if not final — include TBD opponents (e.g. waiting on First Four)
     const upcoming = games.find(g => {
       const s = g.status?.toLowerCase() || "";
-      return !s.includes("final") && g.opponent && g.opponent !== "TBD";
+      return !s.includes("final") && !s.includes("post") && g.opponent;
     });
 
     // Find future rounds (possibleOpponents entries)

@@ -175,10 +175,14 @@ function getPossibleOpponents(teamName, targetRound, allGames, allTeamMap) {
   const teamRegion = teamGames.find(g => g.region)?.region || null;
 
   // Build set of eliminated teams (lost a final game)
+  // Only mark eliminated if the game is truly final AND both teams are real (not TBD)
   const eliminated = new Set();
   allGames.forEach(g => {
     const s = g.status?.toLowerCase() || "";
-    if (s.includes("final") || s.includes("post")) {
+    const isFinal = s.includes("final") || s.includes("post");
+    const bothReal = g.home.name !== "TBD" && g.away.name !== "TBD";
+    const hasWinner = g.home.winner || g.away.winner;
+    if (isFinal && bothReal && hasWinner) {
       if (!g.home.winner && g.away.winner) eliminated.add(g.home.name);
       if (!g.away.winner && g.home.winner) eliminated.add(g.away.name);
     }
