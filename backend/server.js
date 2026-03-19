@@ -193,10 +193,22 @@ app.get("/api/bracket", async (req, res) => {
   const { tournament } = req.query;
   if (!tournament) return res.status(400).json({ error: "tournament required" });
 
+  // Debug: test one URL directly
+  const sport = tournament === "womens" ? "basketball-women" : "basketball-men";
+  const testUrl = `https://data.ncaa.com/casablanca/scoreboard/${sport}/d1/2026/03/19/scoreboard.json`;
+  console.log("Testing URL:", testUrl);
+  const testData = await safeFetch(testUrl);
+  console.log("Test response keys:", testData ? Object.keys(testData) : "null");
+  console.log("Games count:", testData?.games?.length || 0);
+  if (testData?.games?.length > 0) {
+    console.log("First game sample:", JSON.stringify(testData.games[0]).slice(0, 300));
+  }
+
   const games = await fetchAllTournamentGames(tournament);
+  console.log("Total games fetched:", games.length);
 
   if (!games.length) {
-    return res.json({ ok: true, teams: [], games: [] });
+    return res.json({ ok: true, teams: [], games: [], debug: { testUrl, testDataKeys: testData ? Object.keys(testData) : null, gamesInTest: testData?.games?.length || 0 } });
   }
 
   // Build team map
